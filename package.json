@@ -15,11 +15,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "keywords": [
-    "pi-package",
-    "pi-extension",
-    "second-opinion"
-  ],
   "files": [
     "index.ts",
     "README.md",
@@ -40,6 +35,11 @@
     "@types/node": "^26.1.2",
     "typescript": "^6.0.3"
   },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "second-opinion"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck"
