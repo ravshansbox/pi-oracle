@@ -10,9 +10,17 @@ After an assistant answers, run:
 /oracle
 ```
 
-Oracle opens a searchable picker containing the authenticated models available in pi, excluding the model that produced the latest answer. The selected model independently reviews the conversation and latest answer, then adds its opinion to the current context.
+Add an optional review instruction after the command:
 
-The selected model is remembered per reviewed model. The next time `/oracle` reviews that model, the previous Oracle model is preselected.
+```text
+/oracle what do you think? answer short
+```
+
+Oracle opens a searchable picker containing the authenticated models available in pi, excluding the model that produced the latest answer. Type to filter by model ID, provider, or display name. Press `Tab` to cycle through the selected model's supported thinking levels, then press `Enter` to run the review.
+
+The current Pi thinking level is used by default and clamped to the selected model's capabilities. The selected model is remembered per reviewed model. The next time `/oracle` reviews that model, the previous Oracle model is preselected.
+
+Oracle honours explicit output constraints from the latest user message and optional command instruction. Requests for a short or brief answer suppress the default detailed sections.
 
 Oracle sends recent conversation text, tool calls, and tool results to the selected model's provider. Hidden thinking is excluded. Images are not forwarded, so image-dependent answers may receive an incomplete review. Nested-call usage appears in the expanded Oracle card but is not included in pi's session totals.
 
