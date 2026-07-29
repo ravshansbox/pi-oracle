@@ -63,11 +63,18 @@ interface OracleSelection {
   thinkingLevel: ModelThinkingLevel;
 }
 
+interface OracleRunOptions extends OracleSelection {
+  conversation: string;
+  originalRequest?: string;
+  request?: string;
+}
+
 interface OracleMessageDetails {
   primaryModel: string;
   oracleModel: string;
   thinkingLevel: ModelThinkingLevel;
   opinion: string;
+  request?: string;
   usage?: {
     input: number;
     output: number;
@@ -157,10 +164,10 @@ function latestUserRequest(messages: AgentMessage[]): string | undefined {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index];
     if (message?.role !== 'user') continue;
-    if (typeof message.content === 'string') return message.content.trim() || undefined;
+    if (typeof message.content === 'string')
+      return message.content.trim() || undefined;
     const text = message.content
-      .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-      .map((part) => part.text)
+      .flatMap((part) => (part.type === 'text' ? [part.text] : []))
       .join('\n')
       .trim();
     return text || undefined;
@@ -201,7 +208,8 @@ function buildConversation(
 ): string {
   const budget = conversationCharacterBudget(model);
   const contextMessages = messages.filter(
-    (message) => message.role !== 'custom' || message.customType !== 'oracle-opinion',
+    (message) =>
+      message.role !== 'custom' || message.customType !== 'oracle-opinion',
   );
   const chunks = withoutThinking(convertToLlm(contextMessages))
     .map((message) => serializeConversation([message]))
@@ -242,6 +250,8 @@ async function selectOracleModel(
   models: Model<Api>[],
   rememberedModel: string | undefined,
 ): Promise<OracleSelection | undefined> {
+  const firstModel = models[0];
+  if (!firstModel) return undefined;
   const items = modelItems(models);
   const modelsByKey = new Map(models.map((model) => [modelKey(model), model]));
   const selection = await ctx.ui.custom<OracleSelection | null>(
@@ -249,17 +259,22 @@ async function selectOracleModel(
       const container = new Container();
       const searchInput = new Input();
       const listContainer = new Container();
-      const initialModel = modelsByKey.get(rememberedModel ?? '') ?? models[0]!;
+      const initialModel = modelsByKey.get(rememberedModel ?? '') ?? firstModel;
       let selectedModel = initialModel;
       let preferredThinkingLevel = ctx.thinkingLevel ?? 'off';
-      let thinkingLevel = clampThinkingLevel(initialModel, preferredThinkingLevel);
+      let thinkingLevel = clampThinkingLevel(
+        initialModel,
+        preferredThinkingLevel,
+      );
       let selectList: SelectList;
 
       const thinkingText = new Text('', 1, 0);
       const updateThinkingText = () => {
         const levels = getSupportedThinkingLevels(selectedModel);
         const hint = levels.length > 1 ? ' · Tab to change' : '';
-        thinkingText.setText(theme.fg('muted', `Thinking: ${thinkingLevel}${hint}`));
+        thinkingText.setText(
+          theme.fg('muted', `Thinking: ${thinkingLevel}${hint}`),
+        );
       };
       const selectModel = (model: Model<Api>) => {
         selectedModel = model;
@@ -268,27 +283,38 @@ async function selectOracleModel(
       };
       const finish = (item: SelectItem) => {
         const model = modelsByKey.get(item.value);
-        if (model) done({ model, thinkingLevel: clampThinkingLevel(model, thinkingLevel) });
+        if (model)
+          done({
+            model,
+            thinkingLevel: clampThinkingLevel(model, thinkingLevel),
+          });
       };
       const rebuildList = (query: string, preferredModel?: string) => {
         const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
         const filteredItems = items.filter((item) => {
-          const haystack = `${item.value} ${item.label} ${item.description ?? ''}`.toLowerCase();
+          const haystack =
+            `${item.value} ${item.label} ${item.description ?? ''}`.toLowerCase();
           return terms.every((term) => haystack.includes(term));
         });
-        selectList = new SelectList(filteredItems, Math.min(Math.max(filteredItems.length, 1), 12), {
-          selectedPrefix: (text) => theme.fg('accent', text),
-          selectedText: (text) => theme.fg('accent', text),
-          description: (text) => theme.fg('muted', text),
-          scrollInfo: (text) => theme.fg('dim', text),
-          noMatch: (text) => theme.fg('warning', text),
-        });
+        selectList = new SelectList(
+          filteredItems,
+          Math.min(Math.max(filteredItems.length, 1), 12),
+          {
+            selectedPrefix: (text) => theme.fg('accent', text),
+            selectedText: (text) => theme.fg('accent', text),
+            description: (text) => theme.fg('muted', text),
+            scrollInfo: (text) => theme.fg('dim', text),
+            noMatch: (text) => theme.fg('warning', text),
+          },
+        );
         const preferredIndex = preferredModel
           ? filteredItems.findIndex((item) => item.value === preferredModel)
           : -1;
         if (preferredIndex >= 0) selectList.setSelectedIndex(preferredIndex);
         const currentItem = selectList.getSelectedItem();
-        const currentModel = currentItem ? modelsByKey.get(currentItem.value) : undefined;
+        const currentModel = currentItem
+          ? modelsByKey.get(currentItem.value)
+          : undefined;
         if (currentModel) selectModel(currentModel);
         selectList.onSelectionChange = (item) => {
           const model = modelsByKey.get(item.value);
@@ -303,28 +329,47 @@ async function selectOracleModel(
         const levels = getSupportedThinkingLevels(selectedModel);
         if (levels.length < 2) return;
         const currentIndex = levels.indexOf(thinkingLevel);
-        thinkingLevel = levels[(currentIndex + 1) % levels.length] ?? levels[0]!;
-        preferredThinkingLevel = thinkingLevel;
+        const nextLevel =
+          levels[(currentIndex + 1) % levels.length] ?? levels[0];
+        if (!nextLevel) return;
+        thinkingLevel = nextLevel;
+        preferredThinkingLevel = nextLevel;
         updateThinkingText();
       };
 
-      container.addChild(new DynamicBorder((text: string) => theme.fg('accent', text)));
-      container.addChild(new Text(theme.fg('accent', theme.bold('Select Oracle model')), 1, 0));
+      container.addChild(
+        new DynamicBorder((text: string) => theme.fg('accent', text)),
+      );
+      container.addChild(
+        new Text(theme.fg('accent', theme.bold('Select Oracle model')), 1, 0),
+      );
       container.addChild(new Text(theme.fg('muted', 'Search:'), 1, 0));
       container.addChild(searchInput);
       container.addChild(listContainer);
       container.addChild(thinkingText);
       container.addChild(
         new Text(
-          theme.fg('dim', "Conversation will be sent to this model's provider · images are not included"),
+          theme.fg(
+            'dim',
+            "Conversation will be sent to this model's provider · images are not included",
+          ),
           1,
           0,
         ),
       );
       container.addChild(
-        new Text(theme.fg('dim', 'Type to filter · ↑↓ navigate · Tab thinking · Enter select · Esc cancel'), 1, 0),
+        new Text(
+          theme.fg(
+            'dim',
+            'Type to filter · ↑↓ navigate · Tab thinking · Enter select · Esc cancel',
+          ),
+          1,
+          0,
+        ),
       );
-      container.addChild(new DynamicBorder((text: string) => theme.fg('accent', text)));
+      container.addChild(
+        new DynamicBorder((text: string) => theme.fg('accent', text)),
+      );
       rebuildList('', modelKey(initialModel));
       updateThinkingText();
 
@@ -359,7 +404,8 @@ async function selectOracleModel(
           const previousQuery = searchInput.getValue();
           searchInput.handleInput(data);
           const query = searchInput.getValue();
-          if (query !== previousQuery) rebuildList(query, modelKey(selectedModel));
+          if (query !== previousQuery)
+            rebuildList(query, modelKey(selectedModel));
           tui.requestRender();
         },
       };
@@ -371,14 +417,16 @@ async function selectOracleModel(
 
 async function runOracle(
   ctx: ExtensionCommandContext,
-  model: Model<Api>,
-  thinkingLevel: ModelThinkingLevel,
-  conversation: string,
-  originalRequest: string | undefined,
-  request: string | undefined,
+  options: OracleRunOptions,
 ): Promise<OracleRunResult> {
+  const { model, thinkingLevel, conversation, originalRequest, request } =
+    options;
   return ctx.ui.custom<OracleRunResult>((tui, theme, _keybindings, done) => {
-    const loader = new BorderedLoader(tui, theme, `Consulting ${model.id} · thinking ${thinkingLevel}...`);
+    const loader = new BorderedLoader(
+      tui,
+      theme,
+      `Consulting ${model.id} · thinking ${thinkingLevel}...`,
+    );
     loader.onAbort = () => done({ kind: 'cancelled' });
 
     const review = async (): Promise<OracleRunResult> => {
@@ -438,11 +486,7 @@ async function runOracle(
       }
 
       const text = response.content
-        .filter(
-          (part): part is { type: 'text'; text: string } =>
-            part.type === 'text',
-        )
-        .map((part) => part.text)
+        .flatMap((part) => (part.type === 'text' ? [part.text] : []))
         .join('\n')
         .trim();
       if (!text)
@@ -469,16 +513,19 @@ function messageText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content
-    .filter((part): part is { type: 'text'; text: string } => {
-      return Boolean(
-        part &&
-        typeof part === 'object' &&
-        'type' in part &&
-        part.type === 'text' &&
-        'text' in part,
-      );
+    .flatMap((part) => {
+      if (
+        !part ||
+        typeof part !== 'object' ||
+        !('type' in part) ||
+        part.type !== 'text' ||
+        !('text' in part) ||
+        typeof part.text !== 'string'
+      ) {
+        return [];
+      }
+      return [part.text];
     })
-    .map((part) => part.text)
     .join('\n');
 }
 
@@ -490,16 +537,26 @@ export default function oracle(pi: ExtensionAPI) {
       const box = new Box(outputPad, 1, (text) =>
         theme.bg('customMessageBg', text),
       );
+      const thinkingLabel = details?.thinkingLevel
+        ? ` · ${details.thinkingLevel}`
+        : '';
       box.addChild(
         new Text(
           theme.fg(
             'accent',
-            theme.bold(`Oracle · ${details?.oracleModel ?? 'second opinion'}`),
+            theme.bold(
+              `Oracle · ${details?.oracleModel ?? 'second opinion'}${thinkingLabel}`,
+            ),
           ),
           0,
           0,
         ),
       );
+      if (details?.request) {
+        box.addChild(
+          new Text(theme.fg('muted', `Request: ${details.request}`), 0, 1),
+        );
+      }
       box.addChild(
         new Markdown(
           details?.opinion ?? messageText(message.content),
@@ -582,14 +639,14 @@ export default function oracle(pi: ExtensionAPI) {
       }
 
       const request = args.trim() || undefined;
-      const result = await runOracle(
-        ctx,
-        selectedModel,
+      const originalRequest = latestUserRequest(messages);
+      const result = await runOracle(ctx, {
+        model: selectedModel,
         thinkingLevel,
-        buildConversation(messages, selectedModel),
-        latestUserRequest(messages),
-        request,
-      );
+        conversation: buildConversation(messages, selectedModel),
+        ...(originalRequest ? { originalRequest } : {}),
+        ...(request ? { request } : {}),
+      });
       if (result.kind === 'cancelled') {
         ctx.ui.notify('Oracle cancelled', 'info');
         return;
@@ -607,6 +664,7 @@ export default function oracle(pi: ExtensionAPI) {
         thinkingLevel,
         opinion: result.text,
       };
+      if (request) details.request = request;
       if (usage) {
         details.usage = {
           input: usage.input,
@@ -618,7 +676,7 @@ export default function oracle(pi: ExtensionAPI) {
       }
       pi.sendMessage({
         customType: 'oracle-opinion',
-        content: `Independent second opinion from ${oracleModelKey} reviewing the latest response by ${reviewedModel}:\n\n${result.text}`,
+        content: `Independent second opinion from ${oracleModelKey} reviewing the latest response by ${reviewedModel}:${request ? `\nOracle request: ${request}` : ''}\n\n${result.text}`,
         display: true,
         details,
       });
