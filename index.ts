@@ -88,6 +88,20 @@ function modelKey(model: Pick<Model<Api>, 'provider' | 'id'>): string {
   return `${model.provider}/${model.id}`;
 }
 
+/**
+ * Human- and model-facing label for an oracle run (`id:effort`, or bare `id`
+ * when reasoning is off). Reads as an opaque identifier so the reasoning level
+ * disambiguates repeat calls without presenting itself as a confidence claim.
+ * Deliberately provider-less: only distinctness matters to the reader. Use
+ * `modelKey` for anything that must be unique, such as config keys.
+ */
+function oracleLabel(
+  model: Model<Api>,
+  thinkingLevel: ModelThinkingLevel,
+): string {
+  return thinkingLevel === 'off' ? model.id : `${model.id}:${thinkingLevel}`;
+}
+
 function isModelPairMap(value: unknown): value is ModelPairMap {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   return Object.entries(value).every(
@@ -141,7 +155,10 @@ async function saveModelPair(
 }
 
 function latestAssistantAnswer(messages: AgentMessage[]): {
-  model?: string;
+  /** Provider-qualified key, for config lookups and model filtering. */
+  key?: string;
+  /** Bare model id, for display and context labels. */
+  label?: string;
   error?: string;
 } {
   for (let index = messages.length - 1; index >= 0; index--) {
@@ -155,7 +172,10 @@ function latestAssistantAnswer(messages: AgentMessage[]): {
     if (!message.content.some((part) => part.type === 'text')) {
       return { error: 'Latest assistant response has no text to review' };
     }
-    return { model: `${message.provider}/${message.model}` };
+    return {
+      key: `${message.provider}/${message.model}`,
+      label: message.model,
+    };
   }
   return { error: 'No assistant answer available to review' };
 }
@@ -537,16 +557,11 @@ export default function oracle(pi: ExtensionAPI) {
       const box = new Box(outputPad, 1, (text) =>
         theme.bg('customMessageBg', text),
       );
-      const thinkingLabel = details?.thinkingLevel
-        ? ` · ${details.thinkingLevel}`
-        : '';
       box.addChild(
         new Text(
           theme.fg(
             'accent',
-            theme.bold(
-              `Oracle · ${details?.oracleModel ?? 'second opinion'}${thinkingLabel}`,
-            ),
+            theme.bold(`Oracle · ${details?.oracleModel ?? 'second opinion'}`),
           ),
           0,
           0,
@@ -574,7 +589,7 @@ export default function oracle(pi: ExtensionAPI) {
           new Text(
             theme.fg(
               'dim',
-              `${details.primaryModel} → ${details.oracleModel} · thinking ${details.thinkingLevel}${usageText}`,
+              `${details.primaryModel} → ${details.oracleModel}${usageText}`,
             ),
             0,
             0,
@@ -598,14 +613,15 @@ export default function oracle(pi: ExtensionAPI) {
         .buildContextEntries()
         .flatMap((entry) => sessionEntryToContextMessages(entry));
       const latestAnswer = latestAssistantAnswer(messages);
-      if (!latestAnswer.model) {
+      if (!latestAnswer.key || !latestAnswer.label) {
         ctx.ui.notify(
           latestAnswer.error ?? 'No assistant answer available to review',
           'warning',
         );
         return;
       }
-      const reviewedModel = latestAnswer.model;
+      const reviewedModel = latestAnswer.key;
+      const reviewedLabel = latestAnswer.label;
 
       await ctx.modelRegistry.refresh();
       const availableModels = ctx.modelRegistry
@@ -657,9 +673,9 @@ export default function oracle(pi: ExtensionAPI) {
       }
 
       const usage = result.response.usage;
-      const oracleModelKey = modelKey(selectedModel);
+      const oracleModelKey = oracleLabel(selectedModel, thinkingLevel);
       const details: OracleMessageDetails = {
-        primaryModel: reviewedModel,
+        primaryModel: reviewedLabel,
         oracleModel: oracleModelKey,
         thinkingLevel,
         opinion: result.text,
@@ -676,7 +692,7 @@ export default function oracle(pi: ExtensionAPI) {
       }
       pi.sendMessage({
         customType: 'oracle-opinion',
-        content: `Independent second opinion from ${oracleModelKey} reviewing the latest response by ${reviewedModel}:${request ? `\nOracle request: ${request}` : ''}\n\n${result.text}`,
+        content: `Independent second opinion from ${oracleModelKey} reviewing the latest response by ${reviewedLabel}:${request ? `\nOracle request: ${request}` : ''}\n\n${result.text}`,
         display: true,
         details,
       });
