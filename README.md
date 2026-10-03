@@ -1,8 +1,18 @@
-# @ravshansbox/pi-oracle
+# pi-oracle
 
 Second-opinion model extension for pi.
 
-## Oracle tool
+## Install
+
+```bash
+pi install git:github.com/ravshansbox/pi-oracle
+```
+
+Add `-l` to install it in project settings.
+
+## Usage
+
+### Oracle tool
 
 The LLM can call `oracle` with a prompt containing its question. Set `includeContext: true` to also share recent conversation history; it defaults to `false`. The tool chooses a second model from the current provider:
 
@@ -13,7 +23,7 @@ The LLM can call `oracle` with a prompt containing its question. Set `includeCon
 
 The current thinking level is clamped to the Oracle model's capabilities. With `includeContext: false`, only the tool prompt is sent to the other provider. With it enabled, recent conversation text, tool calls, and tool results are included; hidden thinking, images, and previous Oracle opinions are excluded. Responses are limited to 4,096 output tokens, and nested-call usage is included in Pi's session totals.
 
-## Oracle command
+### Oracle command
 
 After an assistant answers, run:
 
@@ -35,7 +45,7 @@ Oracle honours explicit output constraints from the latest user message and opti
 
 Oracle sends recent conversation text, tool calls, and tool results to the selected model's provider. Hidden thinking is excluded. Images are not forwarded, so image-dependent answers may receive an incomplete review. Nested-call usage appears in the expanded Oracle card but is not included in pi's session totals.
 
-## Command model pairings
+## Configuration
 
 Pairings for `/oracle` are stored as a flat map in `<Pi agent directory>/oracle.json` (`~/.pi/agent/oracle.json` by default):
 
@@ -48,21 +58,9 @@ Pairings for `/oracle` are stored as a flat map in `<Pi agent directory>/oracle.
 
 Each direction is independent and updates when a different Oracle model is selected.
 
-## Installation
-
-```bash
-pi install git:github.com/ravshansbox/pi-oracle
-```
-
-### Project-local installation
-
-```bash
-pi install -l git:github.com/ravshansbox/pi-oracle
-```
-
 ## Development
 
 ```bash
 npm install
-npm run typecheck
+npm run check
 ```
