@@ -6,10 +6,10 @@ Second-opinion model extension for pi.
 
 The LLM can call `oracle` with a prompt containing its question. Set `includeContext: true` to also share recent conversation history; it defaults to `false`. The tool chooses a second model from the current provider:
 
-| Current provider | Oracle model |
-| --- | --- |
-| `anthropic` | `openai-codex/gpt-5.6-sol` |
-| `openai-codex` | `anthropic/claude-opus-5` |
+| Current provider | Oracle model               |
+| ---------------- | -------------------------- |
+| `anthropic`      | `openai-codex/gpt-5.6-sol` |
+| `openai-codex`   | `anthropic/claude-opus-5`  |
 
 The current thinking level is clamped to the Oracle model's capabilities. With `includeContext: false`, only the tool prompt is sent to the other provider. With it enabled, recent conversation text, tool calls, and tool results are included; hidden thinking, images, and previous Oracle opinions are excluded. Responses are limited to 4,096 output tokens, and nested-call usage is included in Pi's session totals.
 

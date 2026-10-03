@@ -107,18 +107,14 @@ function modelKey(model: Pick<Model<Api>, 'provider' | 'id'>): string {
  * Deliberately provider-less: only distinctness matters to the reader. Use
  * `modelKey` for anything that must be unique, such as config keys.
  */
-function oracleLabel(
-  model: Model<Api>,
-  thinkingLevel: ModelThinkingLevel,
-): string {
+function oracleLabel(model: Model<Api>, thinkingLevel: ModelThinkingLevel): string {
   return thinkingLevel === 'off' ? model.id : `${model.id}:${thinkingLevel}`;
 }
 
 function isModelPairMap(value: unknown): value is ModelPairMap {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   return Object.entries(value).every(
-    ([key, target]) =>
-      key.includes('/') && typeof target === 'string' && target.includes('/'),
+    ([key, target]) => key.includes('/') && typeof target === 'string' && target.includes('/'),
   );
 }
 
@@ -138,8 +134,7 @@ async function loadModelPairs(): Promise<{
     }
     return { pairs: parsed, writable: true };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      return { pairs: {}, writable: true };
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { pairs: {}, writable: true };
     return {
       pairs: {},
       writable: false,
@@ -148,13 +143,9 @@ async function loadModelPairs(): Promise<{
   }
 }
 
-async function saveModelPair(
-  currentModel: string,
-  oracleModel: string,
-): Promise<void> {
+async function saveModelPair(currentModel: string, oracleModel: string): Promise<void> {
   const latest = await loadModelPairs();
-  if (!latest.writable)
-    throw new Error(latest.warning ?? `Could not update ${CONFIG_PATH}`);
+  if (!latest.writable) throw new Error(latest.warning ?? `Could not update ${CONFIG_PATH}`);
 
   const pairs = { ...latest.pairs, [currentModel]: oracleModel };
   await mkdir(dirname(CONFIG_PATH), { recursive: true });
@@ -196,8 +187,7 @@ function latestUserRequest(messages: AgentMessage[]): string | undefined {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index];
     if (message?.role !== 'user') continue;
-    if (typeof message.content === 'string')
-      return message.content.trim() || undefined;
+    if (typeof message.content === 'string') return message.content.trim() || undefined;
     const text = message.content
       .flatMap((part) => (part.type === 'text' ? [part.text] : []))
       .join('\n')
@@ -223,25 +213,15 @@ function conversationCharacterBudget(model: Model<Api>): number {
     16_000,
     Math.max(512, Math.floor(model.contextWindow * 0.25)),
   );
-  const promptOverhead = Math.min(
-    4_000,
-    Math.max(512, Math.floor(model.contextWindow * 0.05)),
-  );
-  const inputTokens = Math.max(
-    512,
-    model.contextWindow - outputReserve - promptOverhead,
-  );
+  const promptOverhead = Math.min(4_000, Math.max(512, Math.floor(model.contextWindow * 0.05)));
+  const inputTokens = Math.max(512, model.contextWindow - outputReserve - promptOverhead);
   return Math.max(1_000, Math.min(MAX_CONVERSATION_CHARS, inputTokens * 3));
 }
 
-function buildConversation(
-  messages: AgentMessage[],
-  model: Model<Api>,
-): string {
+function buildConversation(messages: AgentMessage[], model: Model<Api>): string {
   const budget = conversationCharacterBudget(model);
   const contextMessages = messages.filter(
-    (message) =>
-      message.role !== 'custom' || message.customType !== 'oracle-opinion',
+    (message) => message.role !== 'custom' || message.customType !== 'oracle-opinion',
   );
   const chunks = withoutThinking(convertToLlm(contextMessages))
     .map((message) => serializeConversation([message]))
@@ -275,12 +255,9 @@ function resolveToolOracle(ctx: ExtensionContext): OracleToolSelection {
   const currentModel = ctx.model;
   if (!currentModel) throw new Error('No current model is selected');
 
-  const target =
-    TOOL_MODEL_MAP[currentModel.provider as keyof typeof TOOL_MODEL_MAP];
+  const target = TOOL_MODEL_MAP[currentModel.provider as keyof typeof TOOL_MODEL_MAP];
   if (!target) {
-    throw new Error(
-      `No Oracle model is mapped for provider ${currentModel.provider}`,
-    );
+    throw new Error(`No Oracle model is mapped for provider ${currentModel.provider}`);
   }
 
   const model = ctx.modelRegistry.find(target.provider, target.id);
@@ -303,8 +280,7 @@ function buildToolPrompt(
   request: string,
   includeContext: boolean,
 ): string {
-  if (!includeContext)
-    return `<oracle-request>\n${request}\n</oracle-request>`;
+  if (!includeContext) return `<oracle-request>\n${request}\n</oracle-request>`;
 
   const messages = ctx.sessionManager
     .buildContextEntries()
@@ -312,9 +288,7 @@ function buildToolPrompt(
   const latestMessage = messages.at(-1);
   const priorMessages =
     latestMessage?.role === 'assistant' &&
-    latestMessage.content.some(
-      (part) => part.type === 'toolCall' && part.name === 'oracle',
-    )
+    latestMessage.content.some((part) => part.type === 'toolCall' && part.name === 'oracle')
       ? messages.slice(0, -1)
       : messages;
   const conversation = buildConversation(priorMessages, model);
@@ -330,9 +304,7 @@ async function requestToolOpinion(
   const { model, thinkingLevel } = selection;
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
   if (!auth.ok) {
-    throw new Error(
-      `Authentication unavailable for ${modelKey(model)}: ${auth.error}`,
-    );
+    throw new Error(`Authentication unavailable for ${modelKey(model)}: ${auth.error}`);
   }
 
   const provider = ctx.modelRegistry.getProvider(model.provider);
@@ -364,12 +336,9 @@ async function requestToolOpinion(
     )
     .result();
 
-  if (response.stopReason === 'aborted')
-    throw new Error('Oracle request was cancelled');
+  if (response.stopReason === 'aborted') throw new Error('Oracle request was cancelled');
   if (response.stopReason === 'error') {
-    throw new Error(
-      response.errorMessage ?? `${modelKey(model)} returned an error`,
-    );
+    throw new Error(response.errorMessage ?? `${modelKey(model)} returned an error`);
   }
 
   const opinion = response.content
@@ -399,163 +368,138 @@ async function selectOracleModel(
   if (!firstModel) return undefined;
   const items = modelItems(models);
   const modelsByKey = new Map(models.map((model) => [modelKey(model), model]));
-  const selection = await ctx.ui.custom<OracleSelection | null>(
-    (tui, theme, keybindings, done) => {
-      const container = new Container();
-      const searchInput = new Input();
-      const listContainer = new Container();
-      const initialModel = modelsByKey.get(rememberedModel ?? '') ?? firstModel;
-      let selectedModel = initialModel;
-      let preferredThinkingLevel = ctx.thinkingLevel ?? 'off';
-      let thinkingLevel = clampThinkingLevel(
-        initialModel,
-        preferredThinkingLevel,
-      );
-      let selectList: SelectList;
+  const selection = await ctx.ui.custom<OracleSelection | null>((tui, theme, keybindings, done) => {
+    const container = new Container();
+    const searchInput = new Input();
+    const listContainer = new Container();
+    const initialModel = modelsByKey.get(rememberedModel ?? '') ?? firstModel;
+    let selectedModel = initialModel;
+    let preferredThinkingLevel = ctx.thinkingLevel ?? 'off';
+    let thinkingLevel = clampThinkingLevel(initialModel, preferredThinkingLevel);
+    let selectList: SelectList;
 
-      const thinkingText = new Text('', 1, 0);
-      const updateThinkingText = () => {
-        const levels = getSupportedThinkingLevels(selectedModel);
-        const hint = levels.length > 1 ? ' · Tab to change' : '';
-        thinkingText.setText(
-          theme.fg('muted', `Thinking: ${thinkingLevel}${hint}`),
-        );
-      };
-      const selectModel = (model: Model<Api>) => {
-        selectedModel = model;
-        thinkingLevel = clampThinkingLevel(model, preferredThinkingLevel);
-        updateThinkingText();
-      };
-      const finish = (item: SelectItem) => {
-        const model = modelsByKey.get(item.value);
-        if (model)
-          done({
-            model,
-            thinkingLevel: clampThinkingLevel(model, thinkingLevel),
-          });
-      };
-      const rebuildList = (query: string, preferredModel?: string) => {
-        const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-        const filteredItems = items.filter((item) => {
-          const haystack =
-            `${item.value} ${item.label} ${item.description ?? ''}`.toLowerCase();
-          return terms.every((term) => haystack.includes(term));
-        });
-        selectList = new SelectList(
-          filteredItems,
-          Math.min(Math.max(filteredItems.length, 1), 12),
-          {
-            selectedPrefix: (text) => theme.fg('accent', text),
-            selectedText: (text) => theme.fg('accent', text),
-            description: (text) => theme.fg('muted', text),
-            scrollInfo: (text) => theme.fg('dim', text),
-            noMatch: (text) => theme.fg('warning', text),
-          },
-        );
-        const preferredIndex = preferredModel
-          ? filteredItems.findIndex((item) => item.value === preferredModel)
-          : -1;
-        if (preferredIndex >= 0) selectList.setSelectedIndex(preferredIndex);
-        const currentItem = selectList.getSelectedItem();
-        const currentModel = currentItem
-          ? modelsByKey.get(currentItem.value)
-          : undefined;
-        if (currentModel) selectModel(currentModel);
-        selectList.onSelectionChange = (item) => {
-          const model = modelsByKey.get(item.value);
-          if (model) selectModel(model);
-        };
-        selectList.onSelect = finish;
-        selectList.onCancel = () => done(null);
-        listContainer.clear();
-        listContainer.addChild(selectList);
-      };
-      const cycleThinkingLevel = () => {
-        const levels = getSupportedThinkingLevels(selectedModel);
-        if (levels.length < 2) return;
-        const currentIndex = levels.indexOf(thinkingLevel);
-        const nextLevel =
-          levels[(currentIndex + 1) % levels.length] ?? levels[0];
-        if (!nextLevel) return;
-        thinkingLevel = nextLevel;
-        preferredThinkingLevel = nextLevel;
-        updateThinkingText();
-      };
-
-      container.addChild(
-        new DynamicBorder((text: string) => theme.fg('accent', text)),
-      );
-      container.addChild(
-        new Text(theme.fg('accent', theme.bold('Select Oracle model')), 1, 0),
-      );
-      container.addChild(new Text(theme.fg('muted', 'Search:'), 1, 0));
-      container.addChild(searchInput);
-      container.addChild(listContainer);
-      container.addChild(thinkingText);
-      container.addChild(
-        new Text(
-          theme.fg(
-            'dim',
-            "Conversation will be sent to this model's provider · images are not included",
-          ),
-          1,
-          0,
-        ),
-      );
-      container.addChild(
-        new Text(
-          theme.fg(
-            'dim',
-            'Type to filter · ↑↓ navigate · Tab thinking · Enter select · Esc cancel',
-          ),
-          1,
-          0,
-        ),
-      );
-      container.addChild(
-        new DynamicBorder((text: string) => theme.fg('accent', text)),
-      );
-      rebuildList('', modelKey(initialModel));
+    const thinkingText = new Text('', 1, 0);
+    const updateThinkingText = () => {
+      const levels = getSupportedThinkingLevels(selectedModel);
+      const hint = levels.length > 1 ? ' · Tab to change' : '';
+      thinkingText.setText(theme.fg('muted', `Thinking: ${thinkingLevel}${hint}`));
+    };
+    const selectModel = (model: Model<Api>) => {
+      selectedModel = model;
+      thinkingLevel = clampThinkingLevel(model, preferredThinkingLevel);
       updateThinkingText();
-
-      return {
-        get focused() {
-          return searchInput.focused;
-        },
-        set focused(value: boolean) {
-          searchInput.focused = value;
-        },
-        render: (width: number) => container.render(width),
-        invalidate: () => container.invalidate(),
-        handleInput: (data: string) => {
-          if (keybindings.matches(data, 'tui.select.cancel')) {
-            done(null);
-            return;
-          }
-          if (keybindings.matches(data, 'tui.input.tab')) {
-            cycleThinkingLevel();
-            tui.requestRender();
-            return;
-          }
-          if (
-            keybindings.matches(data, 'tui.select.up') ||
-            keybindings.matches(data, 'tui.select.down') ||
-            keybindings.matches(data, 'tui.select.confirm')
-          ) {
-            selectList.handleInput(data);
-            tui.requestRender();
-            return;
-          }
-          const previousQuery = searchInput.getValue();
-          searchInput.handleInput(data);
-          const query = searchInput.getValue();
-          if (query !== previousQuery)
-            rebuildList(query, modelKey(selectedModel));
-          tui.requestRender();
-        },
+    };
+    const finish = (item: SelectItem) => {
+      const model = modelsByKey.get(item.value);
+      if (model)
+        done({
+          model,
+          thinkingLevel: clampThinkingLevel(model, thinkingLevel),
+        });
+    };
+    const rebuildList = (query: string, preferredModel?: string) => {
+      const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      const filteredItems = items.filter((item) => {
+        const haystack = `${item.value} ${item.label} ${item.description ?? ''}`.toLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      });
+      selectList = new SelectList(filteredItems, Math.min(Math.max(filteredItems.length, 1), 12), {
+        selectedPrefix: (text) => theme.fg('accent', text),
+        selectedText: (text) => theme.fg('accent', text),
+        description: (text) => theme.fg('muted', text),
+        scrollInfo: (text) => theme.fg('dim', text),
+        noMatch: (text) => theme.fg('warning', text),
+      });
+      const preferredIndex = preferredModel
+        ? filteredItems.findIndex((item) => item.value === preferredModel)
+        : -1;
+      if (preferredIndex >= 0) selectList.setSelectedIndex(preferredIndex);
+      const currentItem = selectList.getSelectedItem();
+      const currentModel = currentItem ? modelsByKey.get(currentItem.value) : undefined;
+      if (currentModel) selectModel(currentModel);
+      selectList.onSelectionChange = (item) => {
+        const model = modelsByKey.get(item.value);
+        if (model) selectModel(model);
       };
-    },
-  );
+      selectList.onSelect = finish;
+      selectList.onCancel = () => done(null);
+      listContainer.clear();
+      listContainer.addChild(selectList);
+    };
+    const cycleThinkingLevel = () => {
+      const levels = getSupportedThinkingLevels(selectedModel);
+      if (levels.length < 2) return;
+      const currentIndex = levels.indexOf(thinkingLevel);
+      const nextLevel = levels[(currentIndex + 1) % levels.length] ?? levels[0];
+      if (!nextLevel) return;
+      thinkingLevel = nextLevel;
+      preferredThinkingLevel = nextLevel;
+      updateThinkingText();
+    };
+
+    container.addChild(new DynamicBorder((text: string) => theme.fg('accent', text)));
+    container.addChild(new Text(theme.fg('accent', theme.bold('Select Oracle model')), 1, 0));
+    container.addChild(new Text(theme.fg('muted', 'Search:'), 1, 0));
+    container.addChild(searchInput);
+    container.addChild(listContainer);
+    container.addChild(thinkingText);
+    container.addChild(
+      new Text(
+        theme.fg(
+          'dim',
+          "Conversation will be sent to this model's provider · images are not included",
+        ),
+        1,
+        0,
+      ),
+    );
+    container.addChild(
+      new Text(
+        theme.fg('dim', 'Type to filter · ↑↓ navigate · Tab thinking · Enter select · Esc cancel'),
+        1,
+        0,
+      ),
+    );
+    container.addChild(new DynamicBorder((text: string) => theme.fg('accent', text)));
+    rebuildList('', modelKey(initialModel));
+    updateThinkingText();
+
+    return {
+      get focused() {
+        return searchInput.focused;
+      },
+      set focused(value: boolean) {
+        searchInput.focused = value;
+      },
+      render: (width: number) => container.render(width),
+      invalidate: () => container.invalidate(),
+      handleInput: (data: string) => {
+        if (keybindings.matches(data, 'tui.select.cancel')) {
+          done(null);
+          return;
+        }
+        if (keybindings.matches(data, 'tui.input.tab')) {
+          cycleThinkingLevel();
+          tui.requestRender();
+          return;
+        }
+        if (
+          keybindings.matches(data, 'tui.select.up') ||
+          keybindings.matches(data, 'tui.select.down') ||
+          keybindings.matches(data, 'tui.select.confirm')
+        ) {
+          selectList.handleInput(data);
+          tui.requestRender();
+          return;
+        }
+        const previousQuery = searchInput.getValue();
+        searchInput.handleInput(data);
+        const query = searchInput.getValue();
+        if (query !== previousQuery) rebuildList(query, modelKey(selectedModel));
+        tui.requestRender();
+      },
+    };
+  });
 
   return selection ?? undefined;
 }
@@ -564,8 +508,7 @@ async function runOracle(
   ctx: ExtensionCommandContext,
   options: OracleRunOptions,
 ): Promise<OracleRunResult> {
-  const { model, thinkingLevel, conversation, originalRequest, request } =
-    options;
+  const { model, thinkingLevel, conversation, originalRequest, request } = options;
   return ctx.ui.custom<OracleRunResult>((tui, theme, _keybindings, done) => {
     const loader = new BorderedLoader(
       tui,
@@ -588,9 +531,7 @@ async function runOracle(
       const latestRequest = originalRequest
         ? `<latest-user-request>\n${originalRequest}\n</latest-user-request>\n\n`
         : '';
-      const oracleRequest = request
-        ? `<oracle-request>\n${request}\n</oracle-request>\n\n`
-        : '';
+      const oracleRequest = request ? `<oracle-request>\n${request}\n</oracle-request>\n\n` : '';
       const response = await provider
         .streamSimple(
           model,
@@ -625,8 +566,7 @@ async function runOracle(
       if (response.stopReason === 'error') {
         return {
           kind: 'error',
-          message:
-            response.errorMessage ?? `${modelKey(model)} returned an error`,
+          message: response.errorMessage ?? `${modelKey(model)} returned an error`,
         };
       }
 
@@ -715,18 +655,8 @@ export default function oracle(pi: ExtensionAPI) {
         },
       });
 
-      const prompt = buildToolPrompt(
-        ctx,
-        model,
-        params.prompt,
-        includeContext,
-      );
-      const { opinion, response } = await requestToolOpinion(
-        ctx,
-        selection,
-        prompt,
-        signal,
-      );
+      const prompt = buildToolPrompt(ctx, model, params.prompt, includeContext);
+      const { opinion, response } = await requestToolOpinion(ctx, selection, prompt, signal);
       return {
         content: [
           {
@@ -746,55 +676,37 @@ export default function oracle(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerMessageRenderer(
-    'oracle-opinion',
-    (message, { expanded, outputPad }, theme) => {
-      const details = message.details as OracleMessageDetails | undefined;
-      const box = new Box(outputPad, 1, (text) =>
-        theme.bg('customMessageBg', text),
-      );
+  pi.registerMessageRenderer('oracle-opinion', (message, { expanded, outputPad }, theme) => {
+    const details = message.details as OracleMessageDetails | undefined;
+    const box = new Box(outputPad, 1, (text) => theme.bg('customMessageBg', text));
+    box.addChild(
+      new Text(
+        theme.fg('accent', theme.bold(`Oracle · ${details?.oracleModel ?? 'second opinion'}`)),
+        0,
+        0,
+      ),
+    );
+    if (details?.request) {
+      box.addChild(new Text(theme.fg('muted', `Request: ${details.request}`), 0, 1));
+    }
+    box.addChild(
+      new Markdown(details?.opinion ?? messageText(message.content), 0, 1, getMarkdownTheme()),
+    );
+    if (expanded && details) {
+      const usage = details.usage;
+      const usageText = usage
+        ? ` · ↑${usage.input} ↓${usage.output} · $${usage.cost.toFixed(4)}`
+        : '';
       box.addChild(
         new Text(
-          theme.fg(
-            'accent',
-            theme.bold(`Oracle · ${details?.oracleModel ?? 'second opinion'}`),
-          ),
+          theme.fg('dim', `${details.primaryModel} → ${details.oracleModel}${usageText}`),
           0,
           0,
         ),
       );
-      if (details?.request) {
-        box.addChild(
-          new Text(theme.fg('muted', `Request: ${details.request}`), 0, 1),
-        );
-      }
-      box.addChild(
-        new Markdown(
-          details?.opinion ?? messageText(message.content),
-          0,
-          1,
-          getMarkdownTheme(),
-        ),
-      );
-      if (expanded && details) {
-        const usage = details.usage;
-        const usageText = usage
-          ? ` · ↑${usage.input} ↓${usage.output} · $${usage.cost.toFixed(4)}`
-          : '';
-        box.addChild(
-          new Text(
-            theme.fg(
-              'dim',
-              `${details.primaryModel} → ${details.oracleModel}${usageText}`,
-            ),
-            0,
-            0,
-          ),
-        );
-      }
-      return box;
-    },
-  );
+    }
+    return box;
+  });
 
   pi.registerCommand('oracle', {
     description: 'Get a second opinion from another model',
@@ -810,10 +722,7 @@ export default function oracle(pi: ExtensionAPI) {
         .flatMap((entry) => sessionEntryToContextMessages(entry));
       const latestAnswer = latestAssistantAnswer(messages);
       if (!latestAnswer.key || !latestAnswer.label) {
-        ctx.ui.notify(
-          latestAnswer.error ?? 'No assistant answer available to review',
-          'warning',
-        );
+        ctx.ui.notify(latestAnswer.error ?? 'No assistant answer available to review', 'warning');
         return;
       }
       const reviewedModel = latestAnswer.key;
@@ -831,11 +740,7 @@ export default function oracle(pi: ExtensionAPI) {
       const config = await loadModelPairs();
       if (config.warning) ctx.ui.notify(config.warning, 'warning');
       const rememberedModel = config.pairs[reviewedModel];
-      const selection = await selectOracleModel(
-        ctx,
-        availableModels,
-        rememberedModel,
-      );
+      const selection = await selectOracleModel(ctx, availableModels, rememberedModel);
       if (!selection) return;
       const { model: selectedModel, thinkingLevel } = selection;
 
@@ -843,10 +748,7 @@ export default function oracle(pi: ExtensionAPI) {
         try {
           await saveModelPair(reviewedModel, modelKey(selectedModel));
         } catch (error) {
-          ctx.ui.notify(
-            error instanceof Error ? error.message : String(error),
-            'warning',
-          );
+          ctx.ui.notify(error instanceof Error ? error.message : String(error), 'warning');
         }
       }
 
