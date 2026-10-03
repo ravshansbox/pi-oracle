@@ -51,19 +51,13 @@ Each direction is independent and updates when a different Oracle model is selec
 ## Installation
 
 ```bash
-pi install npm:@ravshansbox/pi-oracle
+pi install git:github.com/ravshansbox/pi-oracle
 ```
 
 ### Project-local installation
 
 ```bash
-pi install -l npm:@ravshansbox/pi-oracle
-```
-
-### Install from Git
-
-```bash
-pi install git:git@github.com:ravshansbox/pi-oracle.git
+pi install -l git:github.com/ravshansbox/pi-oracle
 ```
 
 ## Development
