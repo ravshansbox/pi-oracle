@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
-import { Type } from '@earendil-works/pi-ai';
+import { normalizeContext, Type } from '@earendil-works/pi-ai';
 import {
   type Api,
   type AssistantMessage,
@@ -341,7 +341,7 @@ async function requestToolOpinion(
   const response = await provider
     .streamSimple(
       model,
-      {
+      normalizeContext({
         systemPrompt: TOOL_SYSTEM_PROMPT,
         messages: [
           {
@@ -350,7 +350,7 @@ async function requestToolOpinion(
             timestamp: Date.now(),
           },
         ],
-      },
+      }),
       {
         ...(auth.apiKey ? { apiKey: auth.apiKey } : {}),
         ...(auth.headers ? { headers: auth.headers } : {}),
@@ -594,7 +594,7 @@ async function runOracle(
       const response = await provider
         .streamSimple(
           model,
-          {
+          normalizeContext({
             systemPrompt: SYSTEM_PROMPT,
             messages: [
               {
@@ -608,7 +608,7 @@ async function runOracle(
                 timestamp: Date.now(),
               },
             ],
-          },
+          }),
           {
             ...(auth.apiKey ? { apiKey: auth.apiKey } : {}),
             ...(auth.headers ? { headers: auth.headers } : {}),
