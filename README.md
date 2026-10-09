@@ -5,7 +5,7 @@ Second-opinion model extension for pi.
 ## Install
 
 ```bash
-pi install git:github.com/ravshansbox/pi-oracle
+pi install npm:@ravshansbox/pi-oracle
 ```
 
 Add `-l` to install it in project settings.
