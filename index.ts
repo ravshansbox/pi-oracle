@@ -614,7 +614,7 @@ function messageText(content: unknown): string {
     .join('\n');
 }
 
-export default function oracle(pi: ExtensionAPI) {
+export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: 'oracle',
     label: 'Oracle',
