@@ -100,13 +100,6 @@ function modelKey(model: Pick<Model<Api>, 'provider' | 'id'>): string {
   return `${model.provider}/${model.id}`;
 }
 
-/**
- * Human- and model-facing label for an oracle run (`id:effort`, or bare `id`
- * when reasoning is off). Reads as an opaque identifier so the reasoning level
- * disambiguates repeat calls without presenting itself as a confidence claim.
- * Deliberately provider-less: only distinctness matters to the reader. Use
- * `modelKey` for anything that must be unique, such as config keys.
- */
 function oracleLabel(model: Model<Api>, thinkingLevel: ModelThinkingLevel): string {
   return thinkingLevel === 'off' ? model.id : `${model.id}:${thinkingLevel}`;
 }
@@ -158,9 +151,7 @@ async function saveModelPair(currentModel: string, oracleModel: string): Promise
 }
 
 function latestAssistantAnswer(messages: AgentMessage[]): {
-  /** Provider-qualified key, for config lookups and model filtering. */
   key?: string;
-  /** Bare model id, for display and context labels. */
   label?: string;
   error?: string;
 } {
