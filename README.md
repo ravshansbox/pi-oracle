@@ -12,6 +12,8 @@ Add `-l` to install it in project settings.
 
 ## Usage
 
+Pi loads the extension from `./index.ts` and registers an `oracle` tool and an `/oracle` command.
+
 ### Oracle tool
 
 The LLM can call `oracle` with a prompt containing its question. Set `includeContext: true` to also share recent conversation history; it defaults to `false`. The tool chooses a second model from the current provider:
@@ -21,7 +23,7 @@ The LLM can call `oracle` with a prompt containing its question. Set `includeCon
 | `anthropic`      | `openai-codex/gpt-5.6-sol` |
 | `openai-codex`   | `anthropic/claude-opus-5`  |
 
-The current thinking level is clamped to the Oracle model's capabilities. With `includeContext: false`, only the tool prompt is sent to the other provider. With it enabled, recent conversation text, tool calls, and tool results are included; hidden thinking, images, and previous Oracle opinions are excluded. Responses are limited to 4,096 output tokens, and nested-call usage is included in Pi's session totals.
+The current thinking level is clamped to the Oracle model's capabilities. With `includeContext: false`, only the tool prompt is sent to the other provider. With it enabled, recent conversation text, tool calls, and tool results are included; hidden thinking, images, and previous Oracle opinions are excluded. Responses are limited to 4,096 output tokens, and nested-call usage is included in pi's session totals.
 
 ### Oracle command
 
