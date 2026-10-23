@@ -712,7 +712,7 @@ export default function (pi: ExtensionAPI) {
     description: 'Get a second opinion from another model',
     handler: async (args, ctx) => {
       if (ctx.mode !== 'tui') {
-        ctx.ui.notify('oracle requires interactive mode', 'error');
+        ctx.ui.notify('/oracle requires interactive mode', 'error');
         return;
       }
       await ctx.waitForIdle();
