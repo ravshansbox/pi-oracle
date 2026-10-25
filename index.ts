@@ -303,7 +303,7 @@ async function requestToolOpinion(
 
   const response = await provider
     .streamSimple(
-      model,
+      auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model,
       normalizeContext({
         systemPrompt: TOOL_SYSTEM_PROMPT,
         messages: [
@@ -525,7 +525,7 @@ async function runOracle(
       const oracleRequest = request ? `<oracle-request>\n${request}\n</oracle-request>\n\n` : '';
       const response = await provider
         .streamSimple(
-          model,
+          auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model,
           normalizeContext({
             systemPrompt: SYSTEM_PROMPT,
             messages: [
